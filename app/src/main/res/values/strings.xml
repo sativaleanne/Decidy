@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Decidy</string>
+    <string name="inputHint">Option</string>
+</resources>
