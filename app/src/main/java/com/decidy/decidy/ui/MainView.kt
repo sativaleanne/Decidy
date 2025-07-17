@@ -1,5 +1,6 @@
 package com.decidy.decidy.ui
 
+import android.app.Application
 import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -45,15 +46,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.decidy.decidy.domain.model.Choice
 import com.decidy.decidy.viewmodel.DecidyViewModel
+import com.decidy.decidy.viewmodel.DecidyViewModelFactory
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MainView() {
-    val viewModel: DecidyViewModel = viewModel()
+    val context = LocalContext.current
+    val application = context.applicationContext as Application
+    val viewModel: DecidyViewModel = viewModel(
+        factory = DecidyViewModelFactory(application)
+    )
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
