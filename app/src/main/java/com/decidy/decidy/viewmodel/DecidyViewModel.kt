@@ -1,10 +1,11 @@
 package com.decidy.decidy.viewmodel
 
 import android.app.Application
-import androidx.compose.runtime.*
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.ViewModel
 import com.decidy.decidy.domain.model.Choice
 import kotlin.math.max
 
@@ -73,7 +74,9 @@ class DecidyViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun resetChosen() {
-        wheelUiState = wheelUiState.copy(choices = choices.map { it.copy(chosen = false) })
+        val unchosen = choices.map { it.copy(chosen = false) }
+        val equalized = unchosen.map { it.copy(weight = 1f) }
+        wheelUiState = wheelUiState.copy(choices = equalized, expandedId = null)
         selectedIndex = null
         activeChoicesBeforeSpin = emptyList()
     }

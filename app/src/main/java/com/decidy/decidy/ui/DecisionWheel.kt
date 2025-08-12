@@ -6,7 +6,12 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -19,7 +24,9 @@ import androidx.compose.ui.graphics.takeOrElse
 import androidx.compose.ui.input.pointer.pointerInput
 import com.decidy.decidy.domain.model.Choice
 import com.decidy.decidy.viewmodel.WheelUiState
-import kotlin.math.*
+import kotlin.math.cos
+import kotlin.math.roundToInt
+import kotlin.math.sin
 
 @Composable
 fun DecisionWheel(
@@ -30,71 +37,60 @@ fun DecisionWheel(
     onToggleChoiceById: (id: String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val choices = state.choices
+    val all = state.choices
     val expandedId = state.expandedId
 
-    // Only the unchosen slices are visible & interactive
-    val visibleChoices = remember(choices) { choices.filter { !it.chosen } }
+    // Only unchosen slices are visible + interactive
+    val visible = remember(all) { all.filter { !it.chosen } }
 
     val rotation = remember { Animatable(0f) }
     var spinning by remember { mutableStateOf(false) }
 
     // Restart gesture scopes when selection/weights change
-    val weightsKey = remember(visibleChoices) { visibleChoices.map { it.id to it.weight } }
+    val weightsKey = remember(visible) { visible.map { it.id to it.weight } }
 
-    //Tap to expand/collapse
+    // Tap to expand/collapse (must tap before drag)
     val tapModifier = Modifier.pointerInput(expandedId, weightsKey) {
         detectTapGestures { pos ->
             val id = sliceIdAtTouch(
-                pos,
-                size.width.toFloat(),
-                size.height.toFloat(),
-                rotation.value,
-                visibleChoices
+                pos, size.width.toFloat(), size.height.toFloat(), rotation.value, visible
             )
             if (id != null) onToggleChoiceById(id)
         }
     }
 
-    //Drag ONLY when a slice has been tapped/expanded
+    // Drag only when a slice is expanded (after tap)
     val dragModifier = Modifier.pointerInput(expandedId, weightsKey, isSpinning) {
-        if (expandedId == null) return@pointerInput  // require tap first
+        if (expandedId == null) return@pointerInput
         var last: Offset? = null
         detectDragGestures(
             onDragStart = { last = it },
             onDragCancel = { last = null },
             onDragEnd = { last = null },
             onDrag = { change, _ ->
-                // If user collapses mid-gesture, ignore
                 val targetId = state.expandedId ?: return@detectDragGestures
                 val center = Offset(size.width / 2f, size.height / 2f)
                 val prev = last ?: change.previousPosition
-                val a1 = angleDeg(prev, center)
-                val a2 = angleDeg(change.position, center)
+                val a1 = Math.toDegrees(kotlin.math.atan2((prev.y - center.y), (prev.x - center.x)).toDouble()).toFloat()
+                val a2 = Math.toDegrees(kotlin.math.atan2((change.position.y - center.y), (change.position.x - center.x)).toDouble()).toFloat()
                 var d = a2 - a1
                 if (d > 180f) d -= 360f
                 if (d < -180f) d += 360f
 
-                val total = visibleChoices
-                    .sumOf { it.weight.toDouble() }
-                    .toFloat()
-                    .coerceAtLeast(0.0001f)
-
-                val current = visibleChoices.firstOrNull { it.id == targetId }?.weight
-                    ?: return@detectDragGestures
-
+                val total = visible.sumOf { it.weight.toDouble() }.toFloat().coerceAtLeast(0.0001f)
+                val current = visible.firstOrNull { it.id == targetId }?.weight ?: return@detectDragGestures
                 val newWeight = current + (d / 360f) * total
-                onWeightChangeById(targetId, newWeight)
 
+                onWeightChangeById(targetId, newWeight)
                 last = change.position
                 change.consume()
             }
         )
     }
 
-    // spin logic uses visibleChoices so winner index matches active list
-    LaunchedEffect(isSpinning, visibleChoices) {
-        if (isSpinning && !spinning && visibleChoices.isNotEmpty()) {
+    // Spin & winner detection MUST use the *visible* list to match the UI
+    LaunchedEffect(isSpinning, visible) {
+        if (isSpinning && !spinning && visible.isNotEmpty()) {
             val targetRotation = rotation.value + (720..1440).random()
             spinning = true
             rotation.animateTo(
@@ -102,25 +98,25 @@ fun DecisionWheel(
                 animationSpec = tween(durationMillis = 3000, easing = FastOutSlowInEasing)
             )
 
-            val total = visibleChoices.sumOf { it.weight.toDouble() }.toFloat().coerceAtLeast(0.0001f)
-            val angles = visibleChoices.map { it.weight / total * 360f }
+            val total = visible.sumOf { it.weight.toDouble() }.toFloat().coerceAtLeast(0.0001f)
+            val angles = visible.map { it.weight / total * 360f }
             val normalized = (rotation.value % 360f + 360f) % 360f
-            val finalAngle = (normalized + 90f) % 360f
+            val finalAngle = (normalized + 90f) % 360f // pointer at top
             onSpinEnd(findWinningIndex(finalAngle, angles))
             spinning = false
         }
     }
 
-    // drawing uses only visibleChoices
+    // Draw the *visible* slices
     Canvas(modifier = modifier.then(tapModifier).then(dragModifier)) {
         val radius = size.minDimension / 2f
         val center = Offset(size.width / 2f, size.height / 2f)
-        val total = visibleChoices.sumOf { it.weight.toDouble() }.toFloat().coerceAtLeast(0.0001f)
-        val angles = visibleChoices.map { it.weight / total * 360f }
+        val total = visible.sumOf { it.weight.toDouble() }.toFloat().coerceAtLeast(0.0001f)
+        val angles = visible.map { it.weight / total * 360f }
 
         rotate(rotation.value, pivot = center) {
             var start = 0f
-            for ((i, c) in visibleChoices.withIndex()) {
+            for ((i, c) in visible.withIndex()) {
                 val sweep = angles[i]
                 val isSelected = c.id == expandedId
                 val mid = start + sweep / 2f
@@ -166,7 +162,7 @@ fun DecisionWheel(
             }
         }
 
-        // pointer
+        // pointer at top
         drawPath(
             Path().apply {
                 moveTo(center.x, center.y - radius - 10)

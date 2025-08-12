@@ -46,7 +46,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.decidy.decidy.domain.model.Choice
 import com.decidy.decidy.viewmodel.DecidyViewModel
@@ -125,7 +124,7 @@ fun MainView() {
         if (viewModel.chosenChoices.isNotEmpty()) {
             item {
                 Text(
-                    text = "Chosen Options",
+                    text = "Picks",
                     textAlign = TextAlign.Center,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -141,7 +140,7 @@ fun MainView() {
         if (viewModel.activeChoices.isNotEmpty()) {
             item {
                 Text(
-                    text = "Active Options",
+                    text = "Options",
                     textAlign = TextAlign.Center,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -172,7 +171,7 @@ fun MainView() {
                               },
                     modifier = Modifier.padding(horizontal = 8.dp)
                 ) {
-                    Text("Clear All")
+                    Text("Clear")
                 }
 
                 ElevatedButton(
@@ -182,7 +181,7 @@ fun MainView() {
                               },
                     modifier = Modifier.padding(horizontal = 8.dp)
                 ) {
-                    Text("Reset Chosen")
+                    Text("Reset")
                 }
 
                 ElevatedButton(
@@ -199,7 +198,7 @@ fun MainView() {
                     enabled = !viewModel.isSpinning,
                     modifier = Modifier.padding(horizontal = 8.dp)
                 ) {
-                    Text("Spin Wheel")
+                    Text("Spin")
                 }
             }
         }
