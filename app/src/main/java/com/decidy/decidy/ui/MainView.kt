@@ -106,10 +106,14 @@ fun MainView() {
 
         item {
             DecisionWheel(
-                choices = viewModel.options,
+                state = viewModel.wheelUiState,
                 isSpinning = viewModel.isSpinning,
                 onSpinEnd = { viewModel.stopSpin(it) },
-                onWeightChange = { index, newWeight -> viewModel.updateWeight(index, newWeight) },
+                onWeightChangeById = { id, w -> viewModel.updateWeightById(id, w) },
+                onToggleChoiceById = { id ->
+                    val c = viewModel.choices.firstOrNull { it.id == id }
+                    viewModel.toggleActiveChoice(c)
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp)
@@ -118,10 +122,10 @@ fun MainView() {
 
         }
 
-        if (viewModel.choices.isNotEmpty()) {
+        if (viewModel.chosenChoices.isNotEmpty()) {
             item {
                 Text(
-                    text = "Decision",
+                    text = "Chosen Options",
                     textAlign = TextAlign.Center,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -129,15 +133,15 @@ fun MainView() {
                     style = MaterialTheme.typography.titleMedium
                 )
             }
-            items(viewModel.choices) { choice ->
+            items(viewModel.chosenChoices) { choice ->
                 ChoiceItem(choice, onRemove = viewModel::remove)
             }
         }
 
-        if (viewModel.options.isNotEmpty()) {
+        if (viewModel.activeChoices.isNotEmpty()) {
             item {
                 Text(
-                    text = "Options",
+                    text = "Active Options",
                     textAlign = TextAlign.Center,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -145,7 +149,7 @@ fun MainView() {
                     style = MaterialTheme.typography.titleMedium
                 )
             }
-            items(viewModel.options) { choice ->
+            items(viewModel.activeChoices) { choice ->
                 ChoiceItem(choice, onRemove = viewModel::remove)
             }
         }
@@ -162,10 +166,23 @@ fun MainView() {
                 horizontalArrangement = Arrangement.Center
             ) {
                 ElevatedButton(
-                    onClick = { viewModel.clearPage() },
+                    onClick = {
+                        viewModel.clearPage()
+                        viewModel.clearActiveChoice()
+                              },
                     modifier = Modifier.padding(horizontal = 8.dp)
                 ) {
                     Text("Clear All")
+                }
+
+                ElevatedButton(
+                    onClick = {
+                        viewModel.resetChosen()
+                        viewModel.clearActiveChoice()
+                              },
+                    modifier = Modifier.padding(horizontal = 8.dp)
+                ) {
+                    Text("Reset Chosen")
                 }
 
                 ElevatedButton(
@@ -187,8 +204,8 @@ fun MainView() {
             }
         }
     }
-    val selected = viewModel.selectedIndex?.let { _ ->
-        viewModel.choices.lastOrNull()
+    val selected = viewModel.selectedIndex?.let { index ->
+        viewModel.activeChoicesBeforeSpin.getOrNull(index)
     }
 
     if (selected != null) {

@@ -1,6 +1,7 @@
 package com.decidy.decidy.datastore
 
 import android.content.Context
+import androidx.compose.ui.graphics.Color
 import androidx.datastore.core.DataStore
 import androidx.datastore.dataStore
 import kotlinx.coroutines.flow.Flow
@@ -15,7 +16,13 @@ object ChoiceStorage {
     fun read(context: Context): Flow<List<ChoicePersist>> {
         return context.choiceDataStore.data.map { choiceList ->
             choiceList.choicesList.map {
-                ChoicePersist(label = it.label, weight = it.weight)
+                ChoicePersist(
+                    id = it.id,
+                    label = it.label,
+                    weight = it.weight,
+                    color = Color(it.color.toULong().toLong()), // fix color type conversion
+                    chosen = it.chosen
+                )
             }
         }
     }
@@ -25,8 +32,11 @@ object ChoiceStorage {
             current.toBuilder().clearChoices().addAllChoices(
                 choices.map {
                     ChoiceProto.newBuilder()
+                        .setId(it.id)
                         .setLabel(it.label)
                         .setWeight(it.weight)
+                        .setColor(it.color.value.toLong())
+                        .setChosen(it.chosen)
                         .build()
                 }
             ).build()
