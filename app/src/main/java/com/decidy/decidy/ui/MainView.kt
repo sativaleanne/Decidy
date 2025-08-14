@@ -1,5 +1,6 @@
 package com.decidy.decidy.ui
 
+import android.app.Application
 import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -48,12 +49,17 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.decidy.decidy.domain.model.Choice
 import com.decidy.decidy.viewmodel.DecidyViewModel
+import com.decidy.decidy.viewmodel.DecidyViewModelFactory
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MainView() {
-    val viewModel: DecidyViewModel = viewModel()
+    val context = LocalContext.current
+    val application = context.applicationContext as Application
+    val viewModel: DecidyViewModel = viewModel(
+        factory = DecidyViewModelFactory(application)
+    )
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -99,10 +105,14 @@ fun MainView() {
 
         item {
             DecisionWheel(
-                choices = viewModel.options,
+                state = viewModel.wheelUiState,
                 isSpinning = viewModel.isSpinning,
                 onSpinEnd = { viewModel.stopSpin(it) },
-                onWeightChange = { index, newWeight -> viewModel.updateWeight(index, newWeight) },
+                onWeightChangeById = { id, w -> viewModel.updateWeightById(id, w) },
+                onToggleChoiceById = { id ->
+                    val c = viewModel.choices.firstOrNull { it.id == id }
+                    viewModel.toggleActiveChoice(c)
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp)
@@ -111,10 +121,10 @@ fun MainView() {
 
         }
 
-        if (viewModel.choices.isNotEmpty()) {
+        if (viewModel.chosenChoices.isNotEmpty()) {
             item {
                 Text(
-                    text = "Decision",
+                    text = "Picks",
                     textAlign = TextAlign.Center,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -122,12 +132,12 @@ fun MainView() {
                     style = MaterialTheme.typography.titleMedium
                 )
             }
-            items(viewModel.choices) { choice ->
+            items(viewModel.chosenChoices) { choice ->
                 ChoiceItem(choice, onRemove = viewModel::remove)
             }
         }
 
-        if (viewModel.options.isNotEmpty()) {
+        if (viewModel.activeChoices.isNotEmpty()) {
             item {
                 Text(
                     text = "Options",
@@ -138,7 +148,7 @@ fun MainView() {
                     style = MaterialTheme.typography.titleMedium
                 )
             }
-            items(viewModel.options) { choice ->
+            items(viewModel.activeChoices) { choice ->
                 ChoiceItem(choice, onRemove = viewModel::remove)
             }
         }
@@ -155,10 +165,23 @@ fun MainView() {
                 horizontalArrangement = Arrangement.Center
             ) {
                 ElevatedButton(
-                    onClick = { viewModel.clearPage() },
+                    onClick = {
+                        viewModel.clearPage()
+                        viewModel.clearActiveChoice()
+                              },
                     modifier = Modifier.padding(horizontal = 8.dp)
                 ) {
-                    Text("Clear All")
+                    Text("Clear")
+                }
+
+                ElevatedButton(
+                    onClick = {
+                        viewModel.resetChosen()
+                        viewModel.clearActiveChoice()
+                              },
+                    modifier = Modifier.padding(horizontal = 8.dp)
+                ) {
+                    Text("Reset")
                 }
 
                 ElevatedButton(
@@ -175,13 +198,13 @@ fun MainView() {
                     enabled = !viewModel.isSpinning,
                     modifier = Modifier.padding(horizontal = 8.dp)
                 ) {
-                    Text("Spin Wheel")
+                    Text("Spin")
                 }
             }
         }
     }
-    val selected = viewModel.selectedIndex?.let { _ ->
-        viewModel.choices.lastOrNull()
+    val selected = viewModel.selectedIndex?.let { index ->
+        viewModel.activeChoicesBeforeSpin.getOrNull(index)
     }
 
     if (selected != null) {

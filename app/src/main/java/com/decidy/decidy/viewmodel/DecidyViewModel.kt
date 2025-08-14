@@ -1,84 +1,190 @@
 package com.decidy.decidy.viewmodel
 
+import android.app.Application
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import com.decidy.decidy.domain.model.Choice
-import com.decidy.decidy.domain.usecase.RemoveChoice
-import com.decidy.decidy.domain.usecase.SpinWheel
+import kotlin.math.max
 
-class DecidyViewModel(
-    private val removeChoice: RemoveChoice = RemoveChoice(),
-    private val spinWheel: SpinWheel = SpinWheel()
-) : ViewModel() {
+data class WheelUiState(
+    val choices: List<Choice>,
+    val expandedId: String? = null
+)
 
+
+class DecidyViewModel(application: Application) : AndroidViewModel(application) {
+
+    // Input field
     var choice by mutableStateOf("")
         private set
 
     var showAlert by mutableStateOf(false)
 
-    private val _options = mutableStateListOf<Choice>()
-    val options: List<Choice> get() = _options
+    // Wheel state
+    var wheelUiState by mutableStateOf(WheelUiState(emptyList()))
+        private set
 
-    private val _choices = mutableStateListOf<Choice>()
-    val choices: List<Choice> get() = _choices
-
-    var selectedIndex by mutableStateOf<Int?>(null)
+    // Spin / dialog state
     var isSpinning by mutableStateOf(false)
         private set
 
-    val canAdd get() = choice.isNotEmpty()
-    val canPick get() = _options.isNotEmpty()
+    var selectedIndex by mutableStateOf<Int?>(null)
+    var activeChoicesBeforeSpin: List<Choice> = emptyList()
+        private set
 
-    fun updateChoice(input: String) {
-        choice = input
-    }
+
+    // Core colors from icon with contrast-boosted variants
+    private val Coral       = Color(0xFFE27D60) // Main coral-orange
+    private val DarkCoral   = Color(0xFFB24A3C) // Darker coral for contrast
+    private val Teal        = Color(0xFF85C5B8) // Main teal
+    private val DeepTeal    = Color(0xFF3B8274) // Darker teal for contrast
+    private val PaleMint    = Color(0xFFCCE6DA) // Soft mint
+    private val OffWhite    = Color(0xFFF5F5F0) // Light accent
+
+    // Sequence: alternating warm/cool, then light break
+    private val defaultColors = listOf(
+        Teal,
+        Coral,
+        DeepTeal,
+        DarkCoral,
+        PaleMint,
+        OffWhite
+    )
+
+    private fun reflowColors(list: List<Choice>): List<Choice> =
+        list.mapIndexed { i, ch -> ch.copy(color = defaultColors[i % defaultColors.size]) }
+
+    // getters
+    val choices: List<Choice> get() = wheelUiState.choices
+    val activeChoiceId: String? get() = wheelUiState.expandedId
+    val activeChoices: List<Choice> get() = choices.filter { !it.chosen }
+    val chosenChoices: List<Choice> get() = choices.filter { it.chosen }
+
+    val canAdd: Boolean get() = choice.isNotEmpty()
+    val canPick: Boolean get() = activeChoices.isNotEmpty()
+
+    // ui actions
+    fun updateChoice(input: String) { choice = input }
 
     fun add() {
-        val color = defaultColors[_options.size % defaultColors.size]
-        val newChoice = Choice(label = choice, color = color)
-        _options.add(newChoice)
+        if (choice.isBlank()) return
+        val updated = wheelUiState.choices + Choice(label = choice, color = Color.Unspecified)
+        wheelUiState = wheelUiState.copy(choices = reflowColors(updated))
+        choice = ""
     }
 
-    fun remove(choice: Choice) {
-        val (updatedChoices, updatedOptions) = removeChoice(choice, _options, _choices)
-        _choices.clear()
-        _choices.addAll(updatedChoices)
-        _options.clear()
-        _options.addAll(updatedOptions)
+    fun remove(target: Choice) {
+        val updated = wheelUiState.choices.filterNot { it.id == target.id }
+        wheelUiState = wheelUiState.copy(choices = reflowColors(updated))
     }
 
     fun clearPage() {
-        _options.clear()
-        _choices.clear()
+        wheelUiState = wheelUiState.copy(choices = emptyList(), expandedId = null)
+        selectedIndex = null
+        activeChoicesBeforeSpin = emptyList()
     }
 
+    fun resetChosen() {
+        val unchosen = choices.map { it.copy(chosen = false) }
+        val equalized = unchosen.map { it.copy(weight = 1f) }
+        wheelUiState = wheelUiState.copy(choices = equalized, expandedId = null)
+        selectedIndex = null
+        activeChoicesBeforeSpin = emptyList()
+    }
+
+    fun toggleActiveChoice(choice: Choice?) {
+        val id = choice?.id
+        wheelUiState = wheelUiState.copy(
+            expandedId = if (id != null && id == wheelUiState.expandedId) null else id
+        )
+    }
+
+    fun clearActiveChoice() {
+        wheelUiState = wheelUiState.copy(expandedId = null)
+    }
+
+    // wheel spin flow
     fun spinWheel() {
+        activeChoicesBeforeSpin = activeChoices
         isSpinning = true
+        clearActiveChoice()
     }
 
     fun stopSpin(winningIndex: Int) {
         selectedIndex = winningIndex
         isSpinning = false
-        val (newChoices, updatedOptions) = spinWheel(_options, winningIndex)
-        _choices.addAll(newChoices)
-        _options.clear()
-        _options.addAll(updatedOptions)
-    }
 
-    fun updateWeight(index: Int, newWeight: Float) {
-        if (index in _options.indices) {
-            val current = _options[index]
-            _options[index] = current.copy(weight = newWeight)
+        val active = activeChoices
+        if (winningIndex in active.indices) {
+            val winner = active[winningIndex]
+            wheelUiState = wheelUiState.copy(
+                choices = choices.map { c ->
+                    if (c.id == winner.id) c.copy(chosen = true) else c
+                }
+            )
         }
     }
 
-    private val defaultColors = listOf(
-        Color(0xFFf28b82), Color(0xFFfbbc04), Color(0xFFfff475),
-        Color(0xFFccff90), Color(0xFFa7ffeb), Color(0xFFcbf0f8),
-        Color(0xFFaecbfa), Color(0xFFd7aefb), Color(0xFFfdcfe8)
-    )
+    /**
+     * Update the weight of a single active slice by id and proportionally rescale others,
+     * keeping the total of active weights constant and each above a minimum.
+     */
+    fun updateWeightById(id: String, target: Float) {
+        val active = activeChoices
+        if (active.isEmpty()) return
+
+        val minEach = 0.02f
+        val total = active.sumOf { it.weight.toDouble() }.toFloat().coerceAtLeast(0.0001f)
+
+        val others = active.filter { it.id != id }
+        if (others.isEmpty()) {
+            // Only one active slice
+            wheelUiState = wheelUiState.copy(
+                choices = choices.map { if (it.id == id) it.copy(weight = total) else it }
+            )
+            return
+        }
+
+        // Clamp so others can have at least minEach
+        val maxForTarget = total - minEach * others.size
+        val clamped = target.coerceIn(minEach, maxForTarget)
+
+        val remaining = total - clamped
+        val sumOthers = others.sumOf { it.weight.toDouble() }.toFloat().coerceAtLeast(0.0001f)
+
+        val newWeights = buildMap {
+            put(id, clamped)
+            others.forEach { c ->
+                val scaled = (c.weight / sumOthers) * remaining
+                put(c.id, max(minEach, scaled))
+            }
+        }
+
+        // Normalize to fix rounding
+        val norm = newWeights.values.sum()
+        val factor = total / norm
+
+        wheelUiState = wheelUiState.copy(
+            choices = choices.map { c ->
+                if (c.chosen) c
+                else {
+                    val w = newWeights[c.id]
+                    if (w != null) c.copy(weight = w * factor) else c
+                }
+            }
+        )
+    }
+
+    /**
+     * Backwards-compat overload used by MainView/DecisionWheel that send index within activeChoices.
+     */
+    fun updateWeight(indexInActive: Int, newWeight: Float) {
+        val active = activeChoices
+        if (indexInActive !in active.indices) return
+        updateWeightById(active[indexInActive].id, newWeight)
+    }
 }
+

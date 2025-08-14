@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+option java_package = "com.decidy.decidy.datastore";
+option java_multiple_files = true;
+
+message ChoiceProto {
+  string id = 1;
+  string label = 2;
+  float weight = 3;
+  int64 color = 4;
+  bool chosen = 5;
+}
+
+message ChoiceList {
+  repeated ChoiceProto choices = 1;
+}
