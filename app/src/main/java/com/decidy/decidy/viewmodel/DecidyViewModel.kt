@@ -35,11 +35,27 @@ class DecidyViewModel(application: Application) : AndroidViewModel(application) 
     var activeChoicesBeforeSpin: List<Choice> = emptyList()
         private set
 
+
+    // Core colors from icon with contrast-boosted variants
+    private val Coral       = Color(0xFFE27D60) // Main coral-orange
+    private val DarkCoral   = Color(0xFFB24A3C) // Darker coral for contrast
+    private val Teal        = Color(0xFF85C5B8) // Main teal
+    private val DeepTeal    = Color(0xFF3B8274) // Darker teal for contrast
+    private val PaleMint    = Color(0xFFCCE6DA) // Soft mint
+    private val OffWhite    = Color(0xFFF5F5F0) // Light accent
+
+    // Sequence: alternating warm/cool, then light break
     private val defaultColors = listOf(
-        Color(0xFFf28b82), Color(0xFFfbbc04), Color(0xFFfff475),
-        Color(0xFFccff90), Color(0xFFa7ffeb), Color(0xFFcbf0f8),
-        Color(0xFFaecbfa), Color(0xFFd7aefb), Color(0xFFfdcfe8)
+        Teal,
+        Coral,
+        DeepTeal,
+        DarkCoral,
+        PaleMint,
+        OffWhite
     )
+
+    private fun reflowColors(list: List<Choice>): List<Choice> =
+        list.mapIndexed { i, ch -> ch.copy(color = defaultColors[i % defaultColors.size]) }
 
     // getters
     val choices: List<Choice> get() = wheelUiState.choices
@@ -55,16 +71,14 @@ class DecidyViewModel(application: Application) : AndroidViewModel(application) 
 
     fun add() {
         if (choice.isBlank()) return
-        val index = choices.size
-        val color = defaultColors[index % defaultColors.size]
-        wheelUiState = wheelUiState.copy(
-            choices = choices + Choice(label = choice, color = color)
-        )
+        val updated = wheelUiState.choices + Choice(label = choice, color = Color.Unspecified)
+        wheelUiState = wheelUiState.copy(choices = reflowColors(updated))
         choice = ""
     }
 
-    fun remove(choice: Choice) {
-        wheelUiState = wheelUiState.copy(choices = choices.filterNot { it.id == choice.id })
+    fun remove(target: Choice) {
+        val updated = wheelUiState.choices.filterNot { it.id == target.id }
+        wheelUiState = wheelUiState.copy(choices = reflowColors(updated))
     }
 
     fun clearPage() {

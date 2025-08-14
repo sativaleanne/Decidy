@@ -28,6 +28,9 @@ import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
+private const val POINTER_DEG = 90f            // pointer at top
+private const val POINTER_BIAS_DEG = -0.8f     // tiny nudge toward previous slice
+
 @Composable
 fun DecisionWheel(
     state: WheelUiState,
@@ -101,7 +104,7 @@ fun DecisionWheel(
             val total = visible.sumOf { it.weight.toDouble() }.toFloat().coerceAtLeast(0.0001f)
             val angles = visible.map { it.weight / total * 360f }
             val normalized = (rotation.value % 360f + 360f) % 360f
-            val finalAngle = (normalized + 90f) % 360f // pointer at top
+            val finalAngle = (normalized + POINTER_DEG + POINTER_BIAS_DEG + 360f) % 360f
             onSpinEnd(findWinningIndex(finalAngle, angles))
             spinning = false
         }
@@ -162,12 +165,14 @@ fun DecisionWheel(
             }
         }
 
-        // pointer at top
+        // pointer at top, pointing INTO the wheel
         drawPath(
-            Path().apply {
-                moveTo(center.x, center.y - radius - 10)
-                lineTo(center.x - 20, center.y - radius + 30)
-                lineTo(center.x + 20, center.y - radius + 30)
+            path = Path().apply {
+                // tip slightly inside the wheel edge
+                moveTo(center.x, center.y - radius + 10)
+                // base above the rim
+                lineTo(center.x - 20, center.y - radius - 30)
+                lineTo(center.x + 20, center.y - radius - 30)
                 close()
             },
             color = Color.Black
@@ -199,20 +204,26 @@ private fun sliceIdAtTouch(
     for (c in choices) {
         val sweep = c.weight / total * 360f
         val end = start + sweep
-        if (touchAngle in start..end) return c.id
+        // half-open: [start, end)
+        if (touchAngle >= start && touchAngle < end) return c.id
         start = end
     }
+    // fallback (touchAngle == 360f case)
     return choices.last().id
 }
 
+
 private fun findWinningIndex(angle: Float, angles: List<Float>): Int {
-    var cum = 0f
-    for ((i, s) in angles.withIndex()) {
-        cum += s
-        if (angle <= cum) return i
+    var start = 0f
+    for ((i, sweep) in angles.withIndex()) {
+        val end = start + sweep
+        // half-open: [start, end)
+        if (angle >= start && angle < end) return i
+        start = end
     }
     return angles.lastIndex
 }
+
 
 
 
